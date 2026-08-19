@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>客服管理面板</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --grad-from: #667eea;
+    --grad-to: #764ba2;
+    --bg: #f0f2f5;
+    --panel: #ffffff;
+    --text: #1f2937;
+    --text-dim: #6b7280;
+    --text-muted: #9ca3af;
+    --border: #e5e7eb;
+    --shadow: 0 4px 20px rgba(102, 126, 234, 0.10);
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); overflow: hidden;
+  }
+  /* 顶部栏 */
+  .topbar {
+    height: 60px; background: linear-gradient(135deg, var(--grad-from) 0%, var(--grad-to) 100%);
+    color: #fff; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; box-shadow: 0 2px 12px rgba(118, 75, 162, 0.25); z-index: 10;
+  }
+  .topbar .brand { display: flex; align-items: center; gap: 10px; }
+  .topbar .logo-icon {
+    width: 32px; height: 32px; border-radius: 9px; background: rgba(255,255,255,.22);
+    display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700;
+  }
+  .topbar .title { font-size: 17px; font-weight: 700; }
+  .topbar .title small { display: block; font-size: 11px; opacity: .8; font-weight: 400; }
+  .topbar .actions { display: flex; gap: 8px; }
+  .btn {
+    background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.22); color: #fff;
+    border-radius: 9px; padding: 7px 14px; cursor: pointer; font-size: 13px; transition: background .2s;
+  }
+  .btn:hover { background: rgba(255,255,255,.28); }
+  .btn.solid { background: #fff; color: var(--grad-to); border-color: #fff; font-weight: 600; }
+  .btn.solid:hover { background: #f3f4f6; }
+
+  /* 布局 */
+  .layout { display: flex; height: calc(100% - 60px); gap: 0; }
+  /* 左侧会话列表 */
+  .sidebar {
+    width: 320px; background: var(--panel); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .sidebar .sh {
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(135deg, #667eea10, #764ba210);
+  }
+  .sidebar .sh h3 { font-size: 14px; }
+  .sidebar .sh .cnt { font-size: 11px; color: var(--text-dim); }
+  .session-list { flex: 1; overflow-y: auto; }
+  .session-item {
+    padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s;
+  }
+  .session-item:hover { background: #f9fafb; }
+  .session-item.active { background: linear-gradient(135deg, #eef2ff, #faf5ff); border-left: 3px solid var(--grad-from); padding-left: 13px; }
+  .session-item .sid { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; }
+  .session-item .sid .dot { width: 7px; height: 7px; border-radius: 50%; background: #cbd5e1; }
+  .session-item.transfer .sid .dot { background: #f97316; }
+  .session-item .row { display: flex; justify-content: space-between; margin-top: 5px; font-size: 11px; color: var(--text-muted); }
+  .session-item .intent-tag { padding: 1px 6px; border-radius: 6px; background: #f0f2f5; font-size: 10px; }
+  .empty { padding: 30px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+  /* 右侧内容 */
+  .content { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  /* 统计卡片 */
+  .stats-bar {
+    display: flex; gap: 12px; padding: 14px 18px; background: var(--panel);
+    border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .stat-card {
+    flex: 1; min-width: 120px; background: linear-gradient(135deg, #f8faff, #faf5ff);
+    border: 1px solid #e0e7ff; border-radius: 12px; padding: 12px 14px;
+  }
+  .stat-card .v { font-size: 22px; font-weight: 700; color: var(--grad-to); line-height: 1.2; }
+  .stat-card .l { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .stat-card .v.green { color: #059669; } .stat-card .v.orange { color: #ea580c; }
+
+  /* 知识库状态卡片 */
+  .kb-card {
+    margin: 0 18px; background: linear-gradient(135deg, #1f2937, #111827);
+    color: #e5e7eb; border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 14px;
+  }
+  .kb-card .icon { font-size: 26px; }
+  .kb-card .info { flex: 1; }
+  .kb-card .info .t { font-size: 13px; font-weight: 600; color: #fff; }
+  .kb-card .info .d { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+  .kb-badge { padding: 3px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; }
+  .kb-badge.ok { background: #10b98120; color: #34d399; }
+  .kb-badge.warn { background: #f59e0b20; color: #fbbf24; }
+
+  /* 对话历史区 */
+  .history-wrap { flex: 1; overflow-y: auto; padding: 16px 18px; }
+  .history-wrap .hh { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .history-wrap .hh h3 { font-size: 14px; }
+  .history-wrap .hh .sid-label { font-size: 11px; color: var(--text-muted); font-family: ui-monospace, monospace; }
+  .hmsg {
+    margin-bottom: 12px; max-width: 75%;
+  }
+  .hmsg.user { margin-left: auto; }
+  .hmsg .role { font-size: 10px; color: var(--text-muted); margin-bottom: 3px; }
+  .hmsg.user .role { text-align: right; }
+  .hmsg .b {
+    padding: 9px 13px; border-radius: 12px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  }
+  .hmsg.user .b { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border-bottom-right-radius: 3px; }
+  .hmsg.ai .b { background: var(--panel); border: 1px solid var(--border); border-bottom-left-radius: 3px; }
+  .hmsg .b .ex { margin-top: 6px; padding-top: 5px; border-top: 1px dashed #e5e7eb; font-size: 10px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag { padding: 1px 6px; border-radius: 6px; background: #f0f2f5; font-size: 10px; }
+  .tag.int-transfer { background: #ffedd5; color: #9a3412; }
+  .tag.int-kb { background: #e0e7ff; color: #4338ca; }
+  .tag.int-refund { background: #fee2e2; color: #991b1b; }
+  .tag.int-order { background: #dcfce7; color: #166534; }
+  .tag.int-complaint { background: #fce7f3; color: #9d174d; }
+  .placeholder { text-align: center; color: var(--text-muted); padding: 40px; font-size: 13px; }
+
+  /* 响应式 */
+  @media (max-width: 760px) {
+    .sidebar { width: 100%; position: absolute; z-index: 5; height: 100%; }
+    .sidebar.hide { transform: translateX(-100%); transition: transform .3s; }
+    .stats-bar { padding: 10px; gap: 8px; }
+    .stat-card { min-width: 90px; padding: 9px 10px; }
+    .stat-card .v { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo-icon">◈</div>
+      <div class="title">客服管理面板<small>Multi-Agent CS · Admin Console</small></div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="back-chat">返回对话</button>
+      <button class="btn solid" id="refresh">刷新数据</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- 左侧会话列表 -->
+    <div class="sidebar" id="sidebar">
+      <div class="sh">
+        <h3>会话列表</h3>
+        <span class="cnt" id="session-count">0 个会话</span>
+      </div>
+      <div class="session-list" id="session-list">
+        <div class="empty">加载中…</div>
+      </div>
+    </div>
+
+    <!-- 右侧内容 -->
+    <div class="content">
+      <div class="stats-bar" id="stats-bar">
+        <div class="stat-card"><div class="v" id="s-total">0</div><div class="l">总会话数</div></div>
+        <div class="stat-card"><div class="v" id="s-msgs">0</div><div class="l">总消息数</div></div>
+        <div class="stat-card"><div class="v green" id="s-sat">0%</div><div class="l">平均满意度</div></div>
+        <div class="stat-card"><div class="v orange" id="s-transfer">0</div><div class="l">转人工次数</div></div>
+      </div>
+
+      <div class="kb-card" id="kb-card">
+        <div class="icon">📚</div>
+        <div class="info">
+          <div class="t">知识库状态</div>
+          <div class="d" id="kb-detail">加载中…</div>
+        </div>
+        <span class="kb-badge warn" id="kb-badge">--</span>
+      </div>
+
+      <div class="history-wrap" id="history-wrap">
+        <div class="placeholder">← 请在左侧选择一个会话查看对话历史</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  let currentSid = null;
+  let sessions = [];
+
+  const INTENT_LABEL = {
+    kb_qa: "知识库", order_query: "订单", refund: "退款",
+    transfer: "转人工", complaint: "投诉", general: "闲聊",
+    tool_call: "工具", chitchat: "闲聊", fallback: "降级"
+  };
+  function intentClass(i) { return "int-" + (i || "general"); }
+  function fmtTime(t) {
+    if (!t) return "-";
+    const d = new Date(t);
+    if (isNaN(d)) return t;
+    const pad = (n) => String(n).padStart(2, "0");
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  // ===== 加载会话列表 =====
+  async function loadSessions() {
+    try {
+      const r = await fetch("/api/sessions");
+      const d = await r.json();
+      sessions = d.sessions || [];
+      renderSessions();
+      updateStats();
+    } catch (e) {
+      $("session-list").innerHTML = '<div class="empty">加载失败</div>';
+    }
+  }
+
+  function renderSessions() {
+    const list = $("session-list");
+    $("session-count").textContent = sessions.length + " 个会话";
+    if (sessions.length === 0) {
+      list.innerHTML = '<div class="empty">暂无会话记录</div>';
+      return;
+    }
+    list.innerHTML = "";
+    sessions.forEach((s) => {
+      const it = document.createElement("div");
+      it.className = "session-item" + (s.session_id === currentSid ? " active" : "") + (s.meta ? "" : "");
+      const transfer = s.last_intent === "transfer" || s.last_intent === "complaint";
+      if (transfer) it.classList.add("transfer");
+      it.innerHTML =
+        '<div class="sid"><span class="dot"></span>' + s.session_id + '</div>' +
+        '<div class="row"><span>' + fmtTime(s.last_message_time) + '</span>' +
+        '<span class="intent-tag ' + intentClass(s.last_intent) + '">' + (INTENT_LABEL[s.last_intent] || s.last_intent || "—") + '</span></div>' +
+        '<div class="row"><span>消息数 ' + s.message_count + '</span><span>' + fmtTime(s.created_at).slice(0, 10) + '</span></div>';
+      it.addEventListener("click", () => selectSession(s.session_id));
+      list.appendChild(it);
+    });
+  }
+
+  // ===== 选择会话 =====
+  async function selectSession(sid) {
+    currentSid = sid;
+    renderSessions();
+    const hw = $("history-wrap");
+    hw.innerHTML = '<div class="placeholder">加载对话历史…</div>';
+    try {
+      const r = await fetch("/api/sessions/" + encodeURIComponent(sid));
+      if (!r.ok) { hw.innerHTML = '<div class="placeholder">会话不存在或无消息</div>'; return; }
+      const d = await r.json();
+      renderHistory(d);
+    } catch (e) {
+      hw.innerHTML = '<div class="placeholder">加载失败</div>';
+    }
+  }
+
+  function renderHistory(data) {
+    const hw = $("history-wrap");
+    const msgs = data.messages || [];
+    if (msgs.length === 0) {
+      hw.innerHTML = '<div class="placeholder">该会话暂无消息</div>'; return;
+    }
+    hw.innerHTML =
+      '<div class="hh"><h3>对话历史</h3><span class="sid-label">session: ' + (data.session_id || currentSid) + '</span></div>';
+    msgs.forEach((m) => {
+      const div = document.createElement("div");
+      div.className = "hmsg " + (m.role === "user" ? "user" : "ai");
+      let ex = "";
+      if (m.intent) ex += '<span class="tag ' + intentClass(m.intent) + '">' + (INTENT_LABEL[m.intent] || m.intent) + '</span>';
+      if (m.confidence != null) ex += '<span>置信度 ' + Math.round(m.confidence * 100) + '%</span>';
+      if (m.satisfaction != null) ex += '<span>满意度 ' + Math.round(m.satisfaction * 100) + '%</span>';
+      div.innerHTML =
+        '<div class="role">' + (m.role === "user" ? "用户" : "AI 助手") + ' · ' + fmtTime(m.timestamp) + '</div>' +
+        '<div class="b">' + escapeHtml(m.content || "") + (ex ? '<div class="ex">' + ex + '</div>' : '') + '</div>';
+      hw.appendChild(div);
+    });
+    hw.scrollTop = hw.scrollHeight;
+  }
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // ===== 统计 =====
+  function updateStats() {
+    let totalMsgs = 0, transferCnt = 0, satSum = 0, satCnt = 0;
+    sessions.forEach((s) => {
+      totalMsgs += s.message_count || 0;
+      if (s.last_intent === "transfer" || s.last_intent === "complaint") transferCnt++;
+      if (s.last_satisfaction != null && s.last_satisfaction > 0) { satSum += s.last_satisfaction; satCnt++; }
+    });
+    $("s-total").textContent = sessions.length;
+    $("s-msgs").textContent = totalMsgs;
+    $("s-transfer").textContent = transferCnt;
+    $("s-sat").textContent = satCnt > 0 ? Math.round((satSum / satCnt) * 100) + "%" : "—";
+  }
+
+  // ===== 知识库状态 =====
+  async function loadKB() {
+    try {
+      const r = await fetch("/api/knowledge/status");
+      const d = await r.json();
+      const badge = $("kb-badge"), det = $("kb-detail");
+      det.textContent = "目录: " + (d.knowledge_dir || "-") + " · 文档数: " + (d.doc_count || 0) + " · 检索器: " + (d.retriever || "-");
+      if (d.initialized) {
+        badge.textContent = "已就绪"; badge.className = "kb-badge ok";
+      } else {
+        badge.textContent = "未初始化"; badge.className = "kb-badge warn";
+      }
+    } catch (e) {
+      $("kb-detail").textContent = "加载失败";
+    }
+  }
+
+  // ===== 事件 =====
+  $("refresh").addEventListener("click", () => { loadSessions(); loadKB(); });
+  $("back-chat").addEventListener("click", () => { window.location.href = "/"; });
+
+  // 初始化
+  loadSessions();
+  loadKB();
+})();
+</script>
+</body>
+</html>

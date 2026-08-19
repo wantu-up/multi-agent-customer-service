@@ -1,0 +1,11 @@
+fastapi==0.115.6
+uvicorn==0.34.0
+langchain==0.3.14
+langchain-core==0.1.28
+langchain-openai==0.2.14
+langgraph==0.2.60
+python-dotenv==1.0.1
+pydantic==2.10.4
+sqlite-utils
+chromadb==0.5.23
+sentence-transformers==3.3.1

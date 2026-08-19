@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>多Agent智能客服系统</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --grad-from: #667eea;
+    --grad-to: #764ba2;
+    --bg: #f0f2f5;
+    --panel: #ffffff;
+    --text: #1f2937;
+    --text-dim: #6b7280;
+    --text-muted: #9ca3af;
+    --border: #e5e7eb;
+    --user-bubble: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --ai-bubble: #ffffff;
+    --shadow: 0 4px 20px rgba(102, 126, 234, 0.12);
+    --transfer: #f97316;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+  /* 顶部标题栏 */
+  .topbar {
+    height: 60px;
+    background: linear-gradient(135deg, var(--grad-from) 0%, var(--grad-to) 100%);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    box-shadow: 0 2px 12px rgba(118, 75, 162, 0.25);
+    position: relative;
+    z-index: 10;
+  }
+  .topbar .brand { display: flex; align-items: center; gap: 10px; }
+  .topbar .logo-icon {
+    width: 32px; height: 32px; border-radius: 9px;
+    background: rgba(255,255,255,0.22);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700;
+  }
+  .topbar .title { font-size: 17px; font-weight: 700; letter-spacing: .5px; }
+  .topbar .title small { display: block; font-size: 11px; font-weight: 400; opacity: .8; margin-top: 1px; }
+  /* 顶部右侧实时指标 */
+  .metrics { display: flex; gap: 8px; align-items: center; }
+  .metric {
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 10px;
+    padding: 4px 10px;
+    text-align: center;
+    min-width: 60px;
+    backdrop-filter: blur(4px);
+  }
+  .metric .v { font-size: 13px; font-weight: 700; line-height: 1.2; }
+  .metric .l { font-size: 9px; opacity: .82; letter-spacing: .5px; }
+  .metric.intent .v { font-size: 11px; }
+  .menu-btn {
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.22);
+    color: #fff; border-radius: 9px;
+    width: 36px; height: 36px; cursor: pointer;
+    font-size: 17px; display: flex; align-items: center; justify-content: center;
+    transition: background .2s;
+  }
+  .menu-btn:hover { background: rgba(255,255,255,0.28); }
+
+  /* 主布局 */
+  .layout { display: flex; height: calc(100% - 60px); position: relative; }
+  /* 对话区 */
+  .chat-wrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .transfer-alert {
+    background: linear-gradient(135deg, #ffedd5 0%, #ffe4c4 100%);
+    color: var(--transfer);
+    border-bottom: 1px solid #fed7aa;
+    padding: 9px 16px;
+    font-size: 13px; font-weight: 600;
+    display: none; align-items: center; gap: 8px;
+  }
+  .transfer-alert.show { display: flex; }
+  .transfer-alert .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--transfer); animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+  .messages {
+    flex: 1; overflow-y: auto; padding: 18px;
+    display: flex; flex-direction: column; gap: 14px;
+    scroll-behavior: smooth;
+  }
+  .msg { display: flex; gap: 10px; max-width: 80%; animation: fadeIn .3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .msg .avatar {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: #fff; font-weight: 600;
+  }
+  .msg.user .avatar { background: linear-gradient(135deg, #667eea, #764ba2); }
+  .msg.ai .avatar { background: linear-gradient(135deg, #94a3b8, #64748b); }
+  .bubble {
+    padding: 11px 15px; border-radius: 16px; font-size: 14px; line-height: 1.6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06); word-break: break-word; white-space: pre-wrap;
+  }
+  .msg.user .bubble { background: var(--user-bubble); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.ai .bubble { background: var(--ai-bubble); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .msg.ai .bubble .meta-line {
+    margin-top: 8px; padding-top: 7px; border-top: 1px dashed var(--border);
+    font-size: 11px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 10px;
+  }
+  .tag { padding: 1px 7px; border-radius: 8px; background: #f0f2f5; }
+  .tag.int-kb { background: #e0e7ff; color: #4338ca; }
+  .tag.int-order { background: #dcfce7; color: #166534; }
+  .tag.int-refund { background: #fee2e2; color: #991b1b; }
+  .tag.int-transfer { background: #ffedd5; color: #9a3412; }
+  .tag.int-general { background: #f3f4f6; color: #4b5563; }
+  .tag.int-complaint { background: #fce7f3; color: #9d174d; }
+
+  /* 思考中动画 */
+  .thinking { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
+  .thinking span { width: 7px; height: 7px; border-radius: 50%; background: #94a3b8; animation: bounce 1.2s infinite; }
+  .thinking span:nth-child(2) { animation-delay: .2s; }
+  .thinking span:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce { 0%,80%,100% { transform: scale(.6); opacity: .5; } 40% { transform: scale(1); opacity: 1; } }
+
+  /* 输入区 */
+  .composer {
+    padding: 12px 16px; background: var(--panel); border-top: 1px solid var(--border);
+    display: flex; gap: 10px; align-items: flex-end;
+  }
+  .composer textarea {
+    flex: 1; resize: none; border: 1px solid var(--border); border-radius: 14px;
+    padding: 11px 14px; font-size: 14px; line-height: 1.5; max-height: 120px;
+    font-family: inherit; outline: none; transition: border-color .2s, box-shadow .2s;
+    background: #f9fafb; color: var(--text);
+  }
+  .composer textarea:focus { border-color: var(--grad-from); box-shadow: 0 0 0 3px rgba(102,126,234,.15); background:#fff; }
+  .send-btn {
+    background: linear-gradient(135deg, var(--grad-from), var(--grad-to));
+    color: #fff; border: none; border-radius: 14px;
+    width: 44px; height: 44px; cursor: pointer; font-size: 18px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .15s, opacity .2s; box-shadow: 0 3px 10px rgba(118,75,162,.3);
+  }
+  .send-btn:hover { transform: translateY(-1px); }
+  .send-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  /* 右侧路由面板 */
+  .route-panel {
+    width: 320px; background: var(--panel); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; transition: margin .3s ease, opacity .3s;
+    flex-shrink: 0;
+  }
+  .route-panel.collapsed { margin-right: -320px; opacity: 0; }
+  .route-panel .ph {
+    padding: 16px; border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, #667eea15, #764ba215);
+  }
+  .route-panel .ph h3 { font-size: 14px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .route-panel .ph p { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+  .route-list { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .route-item {
+    display: flex; align-items: center; gap: 10px;
+    background: #f9fafb; border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px;
+    position: relative; transition: all .25s;
+  }
+  .route-item.active {
+    background: linear-gradient(135deg, #eef2ff, #faf5ff);
+    border-color: #c7d2fe; box-shadow: 0 3px 12px rgba(102,126,234,.15);
+  }
+  .route-item .step { font-size: 12px; color: var(--text); font-weight: 600; }
+  .route-item .desc { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+  .route-item .num {
+    width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--grad-from), var(--grad-to)); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+  }
+  .route-item.done .num { background: #10b981; }
+  .route-arrow { text-align: center; color: var(--text-muted); font-size: 14px; line-height: 1; }
+  .route-path-box {
+    margin-top: 14px; padding: 12px; border-radius: 10px;
+    background: #1f2937; color: #e5e7eb; font-size: 11px; font-family: ui-monospace, monospace;
+    line-height: 1.7; word-break: break-all;
+  }
+  .route-path-box .label { color: #94a3b8; display: block; margin-bottom: 4px; font-size: 10px; }
+  .route-path-box .degraded { color: #fbbf24; }
+  .empty-hint { text-align: center; color: var(--text-muted); font-size: 12px; padding: 30px 10px; }
+
+  /* 响应式 */
+  @media (max-width: 760px) {
+    .metrics .metric { min-width: 48px; padding: 3px 7px; }
+    .metrics .metric .v { font-size: 11px; }
+    .metrics .metric.intent { display: none; }
+    .topbar .title { font-size: 15px; }
+    .route-panel { position: fixed; right: 0; top: 60px; bottom: 0; width: 84%; max-width: 320px; z-index: 20; box-shadow: -4px 0 24px rgba(0,0,0,.15); }
+    .route-panel.collapsed { margin-right: 0; transform: translateX(100%); opacity: 1; }
+    .msg { max-width: 88%; }
+    .composer { padding: 9px 11px; }
+  }
+</style>
+</head>
+<body>
+  <!-- 顶部栏 -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo-icon">AI</div>
+      <div class="title">多Agent智能客服系统<small>Intent Recognition · Multi-Agent · QA</small></div>
+    </div>
+    <div class="metrics">
+      <div class="metric intent"><div class="v" id="m-intent">-</div><div class="l">意图</div></div>
+      <div class="metric"><div class="v" id="m-conf">0%</div><div class="l">置信度</div></div>
+      <div class="metric"><div class="v" id="m-sat">0%</div><div class="l">满意度</div></div>
+      <button class="menu-btn" id="toggle-panel" title="Agent路由面板">≡</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- 对话区 -->
+    <div class="chat-wrap">
+      <div class="transfer-alert" id="transfer-alert">
+        <span class="dot"></span><span>已触发转人工 — 已为您接入人工坐席</span>
+      </div>
+      <div class="messages" id="messages"></div>
+      <div class="composer">
+        <textarea id="input" rows="1" placeholder="输入您的问题，按 Enter 发送…" autocomplete="off"></textarea>
+        <button class="send-btn" id="send" title="发送">➤</button>
+      </div>
+    </div>
+
+    <!-- 右侧路由面板 -->
+    <div class="route-panel" id="route-panel">
+      <div class="ph">
+        <h3>◈ Agent 路由路径</h3>
+        <p>实时展示意图识别 → 子Agent → 质检的调度链路</p>
+      </div>
+      <div class="route-list" id="route-list">
+        <div class="empty-hint">发送消息后，此处展示本次请求经过的 Agent 节点</div>
+      </div>
+      <div class="route-path-box" id="route-path-box" style="display:none">
+        <span class="label">RAW ROUTE</span>
+        <span id="route-path-text"></span>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+  // ===== 会话ID (localStorage 持久化) =====
+  const STORE_KEY = "macs_session";
+  function genSessionId() {
+    return "s-" + Date.now().toString(36).slice(-4) + Math.random().toString(36).slice(2, 6);
+  }
+  let sessionId = localStorage.getItem(STORE_KEY) || genSessionId();
+  localStorage.setItem(STORE_KEY, sessionId);
+
+  const $ = (id) => document.getElementById(id);
+  const msgs = $("messages"), input = $("input"), sendBtn = $("send");
+  const mIntent = $("m-intent"), mConf = $("m-conf"), mSat = $("m-sat");
+  const transferAlert = $("transfer-alert");
+  const routeList = $("route-list"), routePanel = $("route-panel");
+  const routePathBox = $("route-path-box"), routePathText = $("route-path-text");
+
+  // ===== 意图中文映射 =====
+  const INTENT_LABEL = {
+    kb_qa: "知识库问答", order_query: "订单查询", refund: "售后退款",
+    transfer: "转人工", complaint: "投诉处理", general: "通用闲聊",
+    tool_call: "工具调用", chitchat: "闲聊", fallback: "降级"
+  };
+  function intentClass(i) { return "int-" + (i || "general"); }
+
+  // ===== 渲染消息 =====
+  function scrollBottom() { msgs.scrollTop = msgs.scrollHeight; }
+  function addMessage(role, text, meta) {
+    const wrap = document.createElement("div");
+    wrap.className = "msg " + (role === "user" ? "user" : "ai");
+    const av = document.createElement("div");
+    av.className = "avatar";
+    av.textContent = role === "user" ? "我" : "AI";
+    const bub = document.createElement("div");
+    bub.className = "bubble";
+    bub.textContent = text;
+    if (role === "ai" && meta) {
+      const ml = document.createElement("div");
+      ml.className = "meta-line";
+      let html = "";
+      if (meta.intent) html += '<span class="tag ' + intentClass(meta.intent) + '">' + (INTENT_LABEL[meta.intent] || meta.intent) + '</span>';
+      if (meta.confidence != null) html += '<span>置信度 ' + Math.round(meta.confidence * 100) + '%</span>';
+      if (meta.satisfaction != null) html += '<span>满意度 ' + Math.round(meta.satisfaction * 100) + '%</span>';
+      if (meta.duration_ms != null) html += '<span>耗时 ' + meta.duration_ms + 'ms</span>';
+      if (meta.degraded) html += '<span class="tag" style="background:#fef3c7;color:#92400e">降级</span>';
+      ml.innerHTML = html;
+      bub.appendChild(ml);
+    }
+    wrap.appendChild(av);
+    wrap.appendChild(bub);
+    msgs.appendChild(wrap);
+    scrollBottom();
+    return wrap;
+  }
+
+  // 思考中占位
+  function showThinking() {
+    const wrap = document.createElement("div");
+    wrap.className = "msg ai"; wrap.id = "thinking-msg";
+    wrap.innerHTML = '<div class="avatar">AI</div><div class="bubble"><div class="thinking"><span></span><span></span><span></span></div></div>';
+    msgs.appendChild(wrap); scrollBottom();
+  }
+  function removeThinking() { const t = $("thinking-msg"); if (t) t.remove(); }
+
+  // ===== 顶部指标更新 =====
+  function updateMetrics(data) {
+    const intent = data.intent || "general";
+    mIntent.textContent = INTENT_LABEL[intent] || intent;
+    mConf.textContent = Math.round((data.confidence || 0) * 100) + "%";
+    mSat.textContent = Math.round((data.satisfaction || 0) * 100) + "%";
+    transferAlert.classList.toggle("show", !!data.need_transfer);
+  }
+
+  // ===== 右侧路由面板 =====
+  function renderRoute(meta) {
+    let route = meta.route || "";
+    if (Array.isArray(route)) route = route.join("→");
+    if (!route && meta.route_history && meta.route_history.length) route = meta.route_history.join("→");
+    if (!route) route = "意图识别→通用Agent→质检";
+    routePathBox.style.display = "block";
+    routePathText.innerHTML = route + (meta.degraded ? ' <span class="degraded">[degraded]</span>' : "");
+
+    // 解析 route 字符串 "意图识别→知识库问答Agent→质检" 拆分节点
+    let steps = String(route).split(/[→>]/).map(s => s.trim()).filter(Boolean);
+    if (steps.length === 0) steps = ["意图识别", "子Agent", "质检"];
+
+    const descMap = {
+      "意图识别": "Intent 分类 · 置信度评估",
+      "质检": "Quality Check · 满意度打分",
+      "知识库问答Agent": "RAG 检索 + LLM 生成",
+      "订单查询Agent": "调用订单查询工具",
+      "售后退款Agent": "售后流程编排",
+      "转人工Agent": "高风险/转人工触发",
+      "投诉处理Agent": "投诉升级处理",
+      "通用闲聊Agent": "闲聊兜底回复",
+    };
+
+    routeList.innerHTML = "";
+    steps.forEach((s, idx) => {
+      const item = document.createElement("div");
+      item.className = "route-item done" + (idx === steps.length - 1 ? " active" : "");
+      item.innerHTML =
+        '<div class="num">' + (idx + 1) + '</div>' +
+        '<div><div class="step">' + s + '</div>' +
+        '<div class="desc">' + (descMap[s] || "Agent 节点") + '</div></div>';
+      routeList.appendChild(item);
+      if (idx < steps.length - 1) {
+        const ar = document.createElement("div");
+        ar.className = "route-arrow"; ar.textContent = "↓";
+        routeList.appendChild(ar);
+      }
+    });
+  }
+
+  // ===== 发送消息 =====
+  let sending = false;
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text || sending) return;
+    sending = true;
+    sendBtn.disabled = true;
+    addMessage("user", text);
+    input.value = "";
+    autoGrow();
+    showThinking();
+    try {
+      const resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, message: text })
+      });
+      removeThinking();
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        addMessage("ai", "服务异常：" + (err.detail || resp.status));
+        return;
+      }
+      const data = await resp.json();
+      if (data.session_id) { sessionId = data.session_id; localStorage.setItem(STORE_KEY, sessionId); }
+      const meta = {
+        intent: data.intent, confidence: data.confidence,
+        satisfaction: data.satisfaction, duration_ms: (data.metadata || {}).duration_ms,
+        degraded: (data.metadata || {}).degraded
+      };
+      addMessage("ai", data.reply || "(空回复)", meta);
+      updateMetrics(data);
+      renderRoute(data.metadata || {});
+    } catch (e) {
+      removeThinking();
+      addMessage("ai", "网络错误，请稍后重试。" + e);
+    } finally {
+      sending = false;
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  // ===== 输入框自适应高度 + Enter发送 =====
+  function autoGrow() {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 120) + "px";
+  }
+  input.addEventListener("input", autoGrow);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+  sendBtn.addEventListener("click", sendMessage);
+
+  // 面板折叠
+  $("toggle-panel").addEventListener("click", () => {
+    routePanel.classList.toggle("collapsed");
+  });
+  // 移动端默认折叠
+  if (window.innerWidth <= 760) routePanel.classList.add("collapsed");
+
+  // ===== 欢迎消息 =====
+  addMessage("ai", "您好，我是多Agent智能客服助手 ✦\n我由「意图识别 → 路由 → 4个子Agent → 质检」组成，可以帮您：\n• 产品/功能咨询（知识库问答）\n• 订单/物流查询\n• 退款/售后处理\n• 投诉与转人工\n请直接描述您的问题，或点击右上角查看 Agent 路由路径。");
+
+  input.focus();
+})();
+</script>
+</body>
+</html>
