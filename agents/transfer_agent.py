@@ -1,14 +1,13 @@
 """
 转人工 Agent
 ====================
-处理复杂/敏感问题，触发转人工
+处理复杂/敏感问题，以人工客服身份接管对话
 
 设计理由:
 - 转人工是敏感兜底分支，处理投诉、情绪激动、复杂业务等场景
-- 用LLM分析用户情绪并生成有温度的安抚性回复，比固定话术更自然
-- 明确标记need_transfer=True，让LangGraph路由到人工坐席节点
-- LLM失败时用预设安抚话术兜底，保证用户不被冷落
-- 安抚回复遵循"共情+说明+告知转接"三段式结构
+- 第一次触发时用LLM生成有温度的安抚+接通回复
+- 后续对话以人工客服身份直接回应用户问题，不再重复"正在转接"
+- LLM失败时用预设话术兜底，保证用户不被冷落
 """
 
 import logging
@@ -33,44 +32,47 @@ def get_llm():
     )
 
 
-# 转人工安抚提示词
-# 设计理由: 三段式结构(共情+说明+告知转接)让安抚更真诚，不敷衍
-TRANSFER_SYSTEM_PROMPT = """你是XX商城的智能客服。用户的问题需要转交人工客服处理。
+# 人工客服系统提示词
+# 设计理由: 以人工客服身份直接回应用户，语气专业、真诚、有温度
+HUMAN_AGENT_PROMPT = """你是XX商城的人工客服代表，现在正在与用户直接对话。
 
-请根据用户消息生成一段安抚性回复，要求：
-1. 先安抚用户情绪，表达理解和歉意
-2. 简要说明为什么需要转人工（如：需要人工核实/涉及复杂处理）
-3. 告知已为您转接人工客服，请稍候
-4. 语气真诚、专业，不要敷衍
-5. 用中文，2-4句话
+请遵循以下原则：
+1. 以人工客服身份回复，语气真诚、专业、有耐心
+2. 直接回答用户的问题，不要说"转接"之类的话，你已经是人工客服了
+3. 如果用户情绪激动，先安抚再解决问题
+4. 如果问题超出你的能力范围，告知会反馈给专员处理
+5. 用中文，回复简洁，2-4句话
 
 【对话历史】
 {history}"""
 
 
 class TransferAgent:
-    """处理复杂/敏感问题，触发转人工"""
+    """处理复杂/敏感问题，以人工客服身份接管对话"""
 
     async def __call__(self, state: Dict) -> Dict:
         """
         转人工处理
 
         处理流程:
-        1. 提取用户消息和对话历史
-        2. LLM分析情绪并生成安抚回复(三段式:共情+说明+告知)
-        3. 标记need_transfer=True供下游路由使用
-        4. LLM失败时用预设安抚话术兜底
+        1. 检查是否已经转接过（need_transfer已在state中）
+        2. 首次转接：生成安抚+接通回复
+        3. 后续对话：以人工客服身份直接回应用户
+        4. 标记need_transfer=True
+        5. LLM失败时用预设话术兜底
 
         Args:
-            state: 包含 messages 字段，对话历史列表
+            state: 包含 messages、need_transfer 字段
 
         Returns:
             {"reply": str, "need_transfer": True}
         """
         messages = state.get("messages", [])
+        already_transferred = state.get("need_transfer", False)
+
         if not messages:
             return {
-                "reply": "您好，已为您转接人工客服，请稍候。",
+                "reply": "您好，我是人工客服，请问有什么可以帮您？",
                 "need_transfer": True,
             }
 
@@ -81,38 +83,56 @@ class TransferAgent:
             else str(last_msg)
         )
 
-        # 格式化最近5轮历史，让LLM理解上下文
+        # 格式化最近5轮历史
         history = self._format_history(messages[:-1], max_turns=5)
 
         try:
             llm = get_llm()
-            response = await llm.ainvoke([
-                SystemMessage(
-                    content=TRANSFER_SYSTEM_PROMPT.format(history=history)
-                ),
-                HumanMessage(content=user_text),
-            ])
+
+            if not already_transferred:
+                # 首次转接：安抚 + 接通
+                response = await llm.ainvoke([
+                    SystemMessage(content=(
+                        "你是XX商城的人工客服。用户的问题需要人工处理，"
+                        "请根据用户消息生成一段回复，要求：\n"
+                        "1. 先安抚用户情绪，表达理解和歉意\n"
+                        "2. 告知用户你已上线，可以直接为其处理问题\n"
+                        "3. 语气真诚专业，2-3句话\n\n"
+                        f"【对话历史】\n{history}"
+                    )),
+                    HumanMessage(content=user_text),
+                ])
+            else:
+                # 后续对话：以人工客服身份直接回应
+                response = await llm.ainvoke([
+                    SystemMessage(
+                        content=HUMAN_AGENT_PROMPT.format(history=history)
+                    ),
+                    HumanMessage(content=user_text),
+                ])
+
             reply = response.content.strip()
-            logger.info(f"转人工安抚回复: {reply[:50]}...")
+            logger.info(f"人工客服回复: {reply[:50]}...")
             return {"reply": reply, "need_transfer": True}
+
         except Exception as e:
-            # LLM失败，用预设安抚话术兜底，保证转人工不中断
             logger.error(f"转人工LLM调用失败: {e}")
+            if not already_transferred:
+                return {
+                    "reply": (
+                        "您好，我是人工客服，很高兴为您服务。"
+                        "请问您遇到了什么问题？我来帮您处理。"
+                    ),
+                    "need_transfer": True,
+                }
             return {
-                "reply": (
-                    "非常抱歉给您带来不好的体验，您的反馈我已记录。"
-                    "已为您转接人工客服，请稍候片刻，会有专人为您处理。"
-                ),
+                "reply": "您好，我在的，请问还有什么可以帮您的吗？",
                 "need_transfer": True,
             }
 
     @staticmethod
     def _format_history(messages: list, max_turns: int = 5) -> str:
-        """
-        格式化对话历史
-
-        只取最近max_turns轮，避免上下文过长
-        """
+        """格式化对话历史，只取最近max_turns轮"""
         recent = (
             messages[-max_turns * 2:]
             if len(messages) > max_turns * 2

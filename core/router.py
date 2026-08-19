@@ -172,6 +172,10 @@ class MultiAgentRouter:
 
     async def _intent_detection_node(self, state: AgentState) -> dict:
         """意图识别节点"""
+        # 已转人工的会话直接走transfer_agent，不再做意图识别
+        if state.get("need_transfer", False):
+            return {"intent": "transfer", "intent_confidence": 1.0}
+
         if _INTENT_AGENT is not None:
             try:
                 result = await _INTENT_AGENT(state)
@@ -378,6 +382,8 @@ class MultiAgentRouter:
         history = session_manager.get_history(session_id)
 
         # 构建初始状态
+        # 读取会话转人工状态：已转人工的会话后续消息直接走人工客服
+        already_transferred = session_manager.is_transferred(session_id)
         initial_state: AgentState = {
             "messages": history,
             "session_id": session_id,
@@ -388,7 +394,7 @@ class MultiAgentRouter:
             "reply": "",
             "risk_score": 0.0,
             "satisfaction_score": 0.0,
-            "need_transfer": False,
+            "need_transfer": already_transferred,
             "metadata": {
                 "route_history": [],
                 "start_time": datetime.now().isoformat(),
@@ -397,6 +403,10 @@ class MultiAgentRouter:
 
         # 执行graph（异步）
         final_state = await self._compiled_graph.ainvoke(initial_state)
+
+        # 如果本次对话触发了转人工，更新会话状态
+        if final_state.get("need_transfer", False):
+            session_manager.set_transferred(session_id, True)
 
         # 记录耗时和结束时间
         elapsed = round(time.time() - start_time, 3)

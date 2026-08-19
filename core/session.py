@@ -36,9 +36,20 @@ class SessionManager:
                     "created_at": None,
                     "last_active": None,
                     "turn_count": 0,
+                    "need_transfer": False,
                 },
             }
         return self._sessions[session_id]
+
+    def is_transferred(self, session_id: str) -> bool:
+        """检查会话是否已转人工"""
+        session = self._ensure_session(session_id)
+        return session["metadata"].get("need_transfer", False)
+
+    def set_transferred(self, session_id: str, transferred: bool = True):
+        """设置会话转人工状态"""
+        session = self._ensure_session(session_id)
+        session["metadata"]["need_transfer"] = transferred
 
     def get_history(self, session_id: str) -> list:
         """获取对话历史
@@ -91,6 +102,7 @@ class SessionManager:
         if session_id in self._sessions:
             self._sessions[session_id]["messages"] = []
             self._sessions[session_id]["metadata"]["turn_count"] = 0
+            self._sessions[session_id]["metadata"]["need_transfer"] = False
 
     def get_all_sessions(self) -> list:
         """获取所有会话摘要（管理面板用）
