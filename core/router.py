@@ -24,12 +24,15 @@ agents包尚未创建时，通过try/except优雅降级，
 """
 
 import time
+import logging
 from datetime import datetime
 
 from langgraph.graph import StateGraph, END
 
 from core.state import AgentState
 from core.session import session_manager
+
+logger = logging.getLogger(__name__)
 
 
 # ====================================================================
@@ -171,10 +174,13 @@ class MultiAgentRouter:
         """意图识别节点"""
         if _INTENT_AGENT is not None:
             try:
-                result = await _INTENT_AGENT.detect(state)
+                result = await _INTENT_AGENT(state)
+                # IntentAgent返回confidence，但state用intent_confidence
+                if "confidence" in result and "intent_confidence" not in result:
+                    result["intent_confidence"] = result.pop("confidence")
                 return result
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"意图识别Agent调用失败: {e}，降级到关键词规则")
         # 降级：基于关键词规则
         return self._fallback_intent_detection(state)
 
@@ -263,23 +269,24 @@ class MultiAgentRouter:
         工具关键词 -> tool_call
         默认 -> chitchat
         """
-        try:
-            from config import settings
-
-            risk_keywords = settings.RISK_KEYWORDS
-        except ImportError:
-            risk_keywords = ["投诉", "差评", "退款", "举报", "律师"]
+        # 转人工关键词（与intent_agent保持一致）
+        transfer_keywords = [
+            "投诉", "差评", "退款失败", "举报",
+            "工商", "315", "消费者协会", "律师",
+            "人工", "转人工", "人工客服", "真人", "真人客服",
+            "找客服", "找人工", "接人工", "转接人工",
+        ]
 
         last_msg = ""
         if state.get("messages"):
             last_msg = state["messages"][-1].get("content", "")
 
-        # 1. 风险关键词 -> 转人工
-        for kw in risk_keywords:
+        # 1. 转人工关键词 -> 转人工（优先级最高）
+        for kw in transfer_keywords:
             if kw in last_msg:
                 return {
                     "intent": "transfer",
-                    "intent_confidence": 0.8,
+                    "intent_confidence": 0.9,
                     "metadata": {"intent_method": "keyword_fallback"},
                 }
 
